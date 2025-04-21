@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wave Propagation Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255,255,255,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+        }
+        #house {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        .wave {
+            position: absolute;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <select id="waveType">
+            <option value="wifi">WiFi (2.4GHz)</option>
+            <option value="sound">Sound (340m/s)</option>
+            <option value="am">AM Radio (1MHz)</option>
+            <option value="fm">FM Radio (100MHz)</option>
+        </select>
+        <button id="addSource">Add Source</button>
+        <button id="addWall">Add Wall</button>
+        <button id="clear">Clear All</button>
+    </div>
+    
+    <svg id="house" xmlns="http://www.w3.org/2000/svg"></svg>
+    
+    <script>
+        class WaveSimulator {
+            constructor() {
+                this.sources = [];
+                this.walls = [];
+                this.waves = [];
+                this.house = document.getElementById('house');
+                this.setupEventListeners();
+                this.setupBaseHouse();
+                this.lastTime = 0;
+                requestAnimationFrame(this.update.bind(this));
+            }
+
+            setupBaseHouse() {
+                // Basic house structure (rectangular with some rooms)
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                
+                // Outer walls
+                const outerWalls = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                outerWalls.setAttribute('x', '100');
+                outerWalls.setAttribute('y', '100');
+                outerWalls.setAttribute('width', '800');
+                outerWalls.setAttribute('height', '600');
+                outerWalls.setAttribute('fill', 'none');
+                outerWalls.setAttribute('stroke', '#000');
+                outerWalls.setAttribute('stroke-width', '5');
+                g.appendChild(outerWalls);
+
+                // Inner walls
+                const innerWall1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                innerWall1.setAttribute('x1', '100');
+                innerWall1.setAttribute('y1', '300');
+                innerWall1.setAttribute('x2', '500');
+                innerWall1.setAttribute('y2', '300');
+                innerWall1.setAttribute('stroke', '#000');
+                innerWall1.setAttribute('stroke-width', '3');
+                g.appendChild(innerWall1);
+
+                // More walls can be added here...
+
+                this.house.appendChild(g);
+            }
+
+            setupEventListeners() {
+                document.getElementById('addSource').addEventListener('click', () => {
+                    const type = document.getElementById('waveType').value;
+                    this.addSource(type);
+                });
+
+                document.getElementById('addWall').addEventListener('click', () => {
+                    // Will be implemented in phase 2
+                });
+
+                document.getElementById('clear').addEventListener('click', () => {
+                    this.clearAll();
+                });
+
+                this.house.addEventListener('click', (e) => {
+                    const rect = this.house.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    // Either place a source or wall depending on mode
+                    // Currently just places sources
+                    const type = document.getElementById('waveType').value;
+                    this.createWaveSource(x, y, type);
+                });
+            }
+
+            addSource(type) {
+                // Set mode to add source
+                console.log(`Adding ${type} source mode activated`);
+            }
+
+            createWaveSource(x, y, type) {
+                const source = {
+                    x, y, type,
+                    lastEmitted: 0,
+                    frequency: this.getFrequencyForType(type),
+                    speed: this.getSpeedForType(type),
+                    wavelength: this.getWavelengthForType(type)
+                };
+                this.sources.push(source);
+                this.emitWave(source);
+            }
+
+            getFrequencyForType(type) {
+                const frequencies = {
+                    'wifi': 2.4e9,
+                    'sound': 1000,
+                    'am': 1e6,
+                    'fm': 100e6
+                };
+                return frequencies[type] || 1e6;
+            }
+
+            getSpeedForType(type) {
+                const speeds = {
+                    'wifi': 3e8,  // light speed
+                    'sound': 340,  // sound speed in m/s
+                    'am': 3e8,
+                    'fm': 3e8
+                };
+                return speeds[type] || 3e8;
+            }
+
+            getWavelengthForType(type) {
+                return this.getSpeedForType(type) / this.getFrequencyForType(type);
+            }
+
+            emitWave(source) {
+                const now = performance.now();
+                if (now - source.lastEmitted > 1000 / (source.frequency / 10)) { // Reduced frequency for visibility
+                    const wave = {
+                        x: source.x,
+                        y: source.y,
+                        radius: 0,
+                        maxRadius: 500 * (source.wavelength * 1000), // Scale for visibility
+                        speed: source.speed / 10000, // Scale for visibility
+                        opacity: 1,
+                        source: source
+                    };
+                    this.waves.push(wave);
+                    source.lastEmitted = now;
+                }
+            }
+
+            updateWaves(time) {
+                const deltaTime = time - this.lastTime;
+                
+                for (let i = this.waves.length - 1; i >= 0; i--) {
+                    const wave = this.waves[i];
+                    wave.radius += wave.speed * deltaTime;
+                    wave.opacity = 1 - (wave.radius / wave.maxRadius);
+                    
+                    if (wave.radius >= wave.maxRadius) {
+                        this.waves.splice(i, 1);
+                    }
+                }
+                
+                for (const source of this.sources) {
+                    this.emitWave(source);
+                }
+                
+                this.renderWaves();
+                this.lastTime = time;
+                requestAnimationFrame(this.update.bind(this));
+            }
+
+            renderWaves() {
+                // Clear old wave visualizations
+                const oldWaves = document.querySelectorAll('.wave-visualization');
+                oldWaves.forEach(w => w.remove());
+                
+                // Draw new waves
+                for (const wave of this.waves) {
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.setAttribute('class', 'wave-visualization');
+                    circle.setAttribute('cx', wave.x.toString());
+                    circle.setAttribute('cy', wave.y.toString());
+                    circle.setAttribute('r', wave.radius.toString());
+                    circle.setAttribute('fill', 'none');
+                    
+                    // Different colors for different wave types
+                    const colors = {
+                        'wifi': '#0055ff',
+                        'sound': '#00aa00',
+                        'am': '#aa0000',
+                        'fm': '#ff8800'
+                    };
+                    
+                    circle.setAttribute('stroke', colors[wave.source.type] || '#000');
+                    circle.setAttribute('stroke-width', '2');
+                    circle.setAttribute('opacity', wave.opacity.toString());
+                    
+                    this.house.appendChild(circle);
+                }
+            }
+
+            update(time) {
+                this.updateWaves(time);
+            }
+
+            clearAll() {
+                this.sources = [];
+                this.waves = [];
+                const waves = document.querySelectorAll('.wave-visualization');
+                waves.forEach(w => w.remove());
+            }
+        }
+
+        // Initialize simulator
+        document.addEventListener('DOMContentLoaded', () => {
+            new WaveSimulator();
+        });
+    </script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+</body>
+</html>
+
